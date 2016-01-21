@@ -2,7 +2,33 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import unicode_literals
 
+from collections import Mapping, Iterable
+
 from twisted.internet import defer
+
+
+def is_delta(item):
+    """
+    Returns True if the given item looks like a delta message.
+    """
+
+    if not isinstance(item, Mapping):
+        return False
+
+    if not 'inserts' in item or not isinstance(item['inserts'], Iterable):
+        return False
+
+    if not 'deletes' in item or not isinstance(item['deletes'], Iterable):
+        return False
+
+    if not 'data' in item or not isinstance(item['data'], Mapping):
+        return False
+
+    return True
+
+
+def is_delta_empty(item):
+    return len(item['inserts']) == 0 and len(item['deletes']) == 0
 
 
 class Extractor(object):
@@ -10,12 +36,18 @@ class Extractor(object):
     def __init__(self, extractor):
         self.extractor = extractor
 
+    def __call__(self, item, send):
+        if is_delta(item) and not is_delta_empty(item):
+            self._extract(item)
 
-    def __call__(self, msg, send):
-        for oid in msg['inserts']:
-            self.extractor(oid, msg['data'][oid])
+        send(item, self)
 
-        send(msg, self)
+    def _extract(self, item):
+        """
+        Apply the extractor function on every insert.
+        """
+        for oid in item['inserts']:
+            self.extractor(oid, item['data'][oid])
 
 
 class Filter(object):
@@ -24,7 +56,16 @@ class Filter(object):
         self.filter = filter
         self._keys = set()
 
-    def __call__(self, msg, send):
+    def __call__(self, item, send):
+        if is_delta(item) and not is_delta_empty(item):
+            self._filter(item)
+            if not is_delta_empty(item):
+                send(item, self)
+
+    def _filter(self, msg):
+        """
+        Applies the filter to a delta item.
+        """
         orig_deletes = msg.pop('deletes')
         orig_inserts = msg.pop('inserts')
         orig_data = msg.pop('data')
@@ -47,8 +88,6 @@ class Filter(object):
         msg['deletes'] = list(keys_affected)
         msg['inserts'] = list(keys_inserted)
         msg['data'] = data
-
-        send(msg, self)
 
 
 class MapReduce(object):
@@ -107,8 +146,10 @@ class MapReduce(object):
 
     @defer.inlineCallbacks
     def __call__(self, item, send):
-        yield self.coiterate(self._mapreduce(item))
-        send(item, self)
+        if is_delta(item) and not is_delta_empty(item):
+            yield self.coiterate(self._mapreduce(item))
+            if not is_delta_empty(item):
+                send(item, self)
 
     def _mapreduce(self, msg):
         # Remove triples for which we received a delete command.

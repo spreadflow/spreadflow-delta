@@ -46,7 +46,7 @@ class FilterTestCase(unittest.TestCase):
 
     def test_default_filter_anything(self):
         """
-        Anything filtered, resulting message is expected to be empty.
+        Anything filtered, nothing is forwarded to dowstream.
         """
         sut = Filter(lambda key, doc: False)
         insert = {
@@ -58,25 +58,20 @@ class FilterTestCase(unittest.TestCase):
                 }
             }
         }
-        expected = {
-            'inserts': [],
-            'deletes': [],
-            'data': {}
-        }
-        send = self.sendmock(expected, sut)
+        send = self.sendmock(None, sut)
         sut(insert, send)
-        send.verify()
+        send.verify(0)
 
         delete = {
             'inserts': [],
             'deletes': ['a'],
             'data': {}
         }
-        expected = {
-            'inserts': [],
-            'deletes': [],
-            'data': {}
-        }
-        send = self.sendmock(expected, sut)
+        send = self.sendmock(None, sut)
         sut(delete, send)
-        send.verify()
+        send.verify(0)
+
+        not_a_delta = "an arbitrary string message"
+        send = self.sendmock(None, sut)
+        sut(not_a_delta, send)
+        send.verify(0)
