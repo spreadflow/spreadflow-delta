@@ -6,14 +6,15 @@ import copy
 import functools
 import string
 
+from testtools import TestCase
 from twisted.internet import defer
-from twisted.trial import unittest
 
 from spreadflow_delta.proc import MapReduce
+from spreadflow_delta.test.matcher import MatchesDeltaItem
 from spreadflow_delta.test.util import SendMock
 
 
-class MapReduceTestCase(unittest.TestCase):
+class MapReduceTestCase(TestCase):
 
     def sendmock(self, item, port):
         return SendMock(item, port, self)

@@ -4,12 +4,14 @@ from __future__ import unicode_literals
 
 import copy
 import string
+from testtools import TestCase
+
 from spreadflow_delta.proc import Filter
-from twisted.trial import unittest
+from spreadflow_delta.test.matcher import MatchesDeltaItem
 
 from spreadflow_delta.test.util import SendMock
 
-class FilterTestCase(unittest.TestCase):
+class FilterTestCase(TestCase):
 
     def sendmock(self, item, port):
         return SendMock(item, port, self)
