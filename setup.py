@@ -1,6 +1,9 @@
 from setuptools import setup
 
-tests_require = ['testtools']
+tests_require = [
+    'fixtures',
+    'testtools'
+]
 
 setup(
     name='SpreadFlowDelta',
