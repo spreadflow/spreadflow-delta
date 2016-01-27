@@ -3,18 +3,16 @@ from __future__ import division
 from __future__ import unicode_literals
 
 import copy
-import string
+
+from mock import Mock
 from testtools import TestCase
 
-from spreadflow_delta.proc import Filter
-from spreadflow_delta.test.matcher import MatchesDeltaItem
+from spreadflow_core.scheduler import Scheduler
+from spreadflow_delta.test.matchers import MatchesSendDeltaItemInvocation
 
-from spreadflow_delta.test.util import SendMock
+from spreadflow_delta.proc import Filter
 
 class FilterTestCase(TestCase):
-
-    def sendmock(self, item, port):
-        return SendMock(item, port, self)
 
     def test_default_filter_nothing(self):
         """
@@ -30,20 +28,22 @@ class FilterTestCase(TestCase):
                 }
             }
         }
-        expected = copy.deepcopy(insert)
-        send = self.sendmock(expected, sut)
+        matches = MatchesSendDeltaItemInvocation(copy.deepcopy(insert), sut)
+        send = Mock(spec=Scheduler.send)
         sut(insert, send)
-        send.verify()
+        self.assertEquals(send.call_count, 1)
+        self.assertThat(send.call_args, matches)
 
         delete = {
             'inserts': [],
             'deletes': ['a'],
             'data': {}
         }
-        expected = copy.deepcopy(delete)
-        send = self.sendmock(expected, sut)
+        matches = MatchesSendDeltaItemInvocation(copy.deepcopy(delete), sut)
+        send = Mock(spec=Scheduler.send)
         sut(delete, send)
-        send.verify()
+        self.assertEquals(send.call_count, 1)
+        self.assertThat(send.call_args, matches)
 
 
     def test_default_filter_anything(self):
@@ -60,20 +60,20 @@ class FilterTestCase(TestCase):
                 }
             }
         }
-        send = self.sendmock(None, sut)
+        send = Mock(spec=Scheduler.send)
         sut(insert, send)
-        send.verify(0)
+        self.assertEquals(send.call_count, 0)
 
         delete = {
             'inserts': [],
             'deletes': ['a'],
             'data': {}
         }
-        send = self.sendmock(None, sut)
+        send = Mock(spec=Scheduler.send)
         sut(delete, send)
-        send.verify(0)
+        self.assertEquals(send.call_count, 0)
 
         not_a_delta = "an arbitrary string message"
-        send = self.sendmock(None, sut)
+        send = Mock(spec=Scheduler.send)
         sut(not_a_delta, send)
-        send.verify(0)
+        self.assertEquals(send.call_count, 0)

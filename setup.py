@@ -2,6 +2,7 @@ from setuptools import setup
 
 tests_require = [
     'fixtures',
+    'mock',
     'testtools'
 ]
 

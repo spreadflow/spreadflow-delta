@@ -6,18 +6,17 @@ import copy
 import functools
 import string
 
+from mock import Mock
 from testtools import TestCase
 from twisted.internet import defer
 
+from spreadflow_core.scheduler import Scheduler
+from spreadflow_delta.test.matchers import MatchesSendDeltaItemInvocation
+
 from spreadflow_delta.proc import MapReduce
-from spreadflow_delta.test.matcher import MatchesDeltaItem
-from spreadflow_delta.test.util import SendMock
 
 
 class MapReduceTestCase(TestCase):
-
-    def sendmock(self, item, port):
-        return SendMock(item, port, self)
 
     @defer.inlineCallbacks
     def test_default_map_identity(self):
@@ -34,20 +33,22 @@ class MapReduceTestCase(TestCase):
                 }
             }
         }
-        expected = copy.deepcopy(insert)
-        send = self.sendmock(expected, sut)
+        matches = MatchesSendDeltaItemInvocation(copy.deepcopy(insert), sut)
+        send = Mock(spec=Scheduler.send)
         yield sut(insert, send)
-        send.verify()
+        self.assertEquals(send.call_count, 1)
+        self.assertThat(send.call_args, matches)
 
         delete = {
             'inserts': [],
             'deletes': ['a'],
             'data': {}
         }
-        expected = copy.deepcopy(delete)
-        send = self.sendmock(expected, sut)
+        matches = MatchesSendDeltaItemInvocation(copy.deepcopy(delete), sut)
+        send = Mock(spec=Scheduler.send)
         yield sut(delete, send)
-        send.verify()
+        self.assertEquals(send.call_count, 1)
+        self.assertThat(send.call_args, matches)
 
 
     @defer.inlineCallbacks
@@ -55,7 +56,6 @@ class MapReduceTestCase(TestCase):
         """
         Merge updates to the same document if no reducer is specified.
         """
-
         def map(key, doc):
             # Unchanged document.
             yield key, doc
@@ -86,9 +86,11 @@ class MapReduceTestCase(TestCase):
                 }
             }
         }
-        send = self.sendmock(expected, sut)
+        matches = MatchesSendDeltaItemInvocation(expected, sut)
+        send = Mock(spec=Scheduler.send)
         yield sut(msg, send)
-        send.verify()
+        self.assertEquals(send.call_count, 1)
+        self.assertThat(send.call_args, matches)
 
 
     @defer.inlineCallbacks
@@ -96,7 +98,6 @@ class MapReduceTestCase(TestCase):
         """
         Test filtering of documents by a mapper function.
         """
-
         def map(key, doc):
             if doc.get('allowed'):
                 yield key, doc
@@ -125,9 +126,11 @@ class MapReduceTestCase(TestCase):
                 },
             }
         }
-        send = self.sendmock(expected, sut)
+        matches = MatchesSendDeltaItemInvocation(expected, sut)
+        send = Mock(spec=Scheduler.send)
         yield sut(insert, send)
-        send.verify()
+        self.assertEquals(send.call_count, 1)
+        self.assertThat(send.call_args, matches)
 
         insert = {
             'inserts': ['g'],
@@ -139,10 +142,11 @@ class MapReduceTestCase(TestCase):
                 }
             }
         }
-        expected = copy.deepcopy(insert)
-        send = self.sendmock(expected, sut)
+        matches = MatchesSendDeltaItemInvocation(copy.deepcopy(insert), sut)
+        send = Mock(spec=Scheduler.send)
         yield sut(insert, send)
-        send.verify()
+        self.assertEquals(send.call_count, 1)
+        self.assertThat(send.call_args, matches)
 
         # Ensure that the filter is also effective when existing documents are
         # deleted.
@@ -156,16 +160,17 @@ class MapReduceTestCase(TestCase):
             'deletes': ['a', 'g'],
             'data': {}
         }
-        send = self.sendmock(expected, sut)
+        matches = MatchesSendDeltaItemInvocation(expected, sut)
+        send = Mock(spec=Scheduler.send)
         yield sut(delete, send)
-        send.verify()
+        self.assertEquals(send.call_count, 1)
+        self.assertThat(send.call_args, matches)
 
     @defer.inlineCallbacks
     def test_map_chain(self):
         """
         Test chaining of mapper functions.
         """
-
         def map1(key, doc):
             yield 'a', {}
             yield 'c', {}
@@ -193,9 +198,11 @@ class MapReduceTestCase(TestCase):
                 'c': {}
             }
         }
-        send = self.sendmock(expected, sut)
+        matches = MatchesSendDeltaItemInvocation(expected, sut)
+        send = Mock(spec=Scheduler.send)
         yield sut(insert, send)
-        send.verify()
+        self.assertEquals(send.call_count, 1)
+        self.assertThat(send.call_args, matches)
 
     @defer.inlineCallbacks
     def test_term_frequency_with_update(self):
@@ -236,9 +243,11 @@ class MapReduceTestCase(TestCase):
             'deletes': [],
             'data': expected_freq
         }
-        send = self.sendmock(expected, sut)
+        matches = MatchesSendDeltaItemInvocation(expected, sut)
+        send = Mock(spec=Scheduler.send)
         yield sut(insert, send)
-        send.verify()
+        self.assertEquals(send.call_count, 1)
+        self.assertThat(send.call_args, matches)
 
         update = {
             'inserts': ['line-4'],
@@ -256,16 +265,17 @@ class MapReduceTestCase(TestCase):
             'deletes': ['firefighter'] + list(expected_freq.keys()),
             'data': expected_freq
         }
-        send = self.sendmock(expected, sut)
+        matches = MatchesSendDeltaItemInvocation(expected, sut)
+        send = Mock(spec=Scheduler.send)
         yield sut(update, send)
-        send.verify()
+        self.assertEquals(send.call_count, 1)
+        self.assertThat(send.call_args, matches)
 
     @defer.inlineCallbacks
     def test_reverse_dependency_with_update(self):
         """
         Test example implementation of reverse dependency analysis.
         """
-
         def map(subj, deplist):
             for dep in deplist:
                 yield dep, [subj]
@@ -295,9 +305,11 @@ class MapReduceTestCase(TestCase):
             'deletes': [],
             'data': expected_rdep
         }
-        send = self.sendmock(expected, sut)
+        matches = MatchesSendDeltaItemInvocation(expected, sut)
+        send = Mock(spec=Scheduler.send)
         yield sut(insert, send)
-        send.verify()
+        self.assertEquals(send.call_count, 1)
+        self.assertThat(send.call_args, matches)
 
         # Remove common.h from util.c
         update = {
@@ -317,6 +329,8 @@ class MapReduceTestCase(TestCase):
             'deletes': expected_rdep.keys(),
             'data': expected_rdep
         }
-        send = self.sendmock(expected, sut)
+        matches = MatchesSendDeltaItemInvocation(expected, sut)
+        send = Mock(spec=Scheduler.send)
         yield sut(update, send)
-        send.verify()
+        self.assertEquals(send.call_count, 1)
+        self.assertThat(send.call_args, matches)
