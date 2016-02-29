@@ -2,6 +2,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import unicode_literals
 
+import codecs
+
 from collections import Mapping, Iterable
 
 from twisted.internet import defer
@@ -237,3 +239,16 @@ class MapReduce(object):
         keys_inserted = set(columns[0])
         self._triples += list(zip(*columns))
         return keys_inserted
+
+
+class Loadfile(Extractor):
+    def __init__(self, key='path', destkey='content', encoding='utf-8'):
+        super(Loadfile, self).__init__()
+        self.key = key
+        self.destkey = destkey
+        self.encoding = encoding
+
+    def extract(self, key, doc):
+        path = doc[self.key]
+        with codecs.open(path, encoding=self.encoding, mode='r') as stream:
+            doc[self.destkey] = stream.read()
