@@ -252,3 +252,19 @@ class Loadfile(Extractor):
         path = doc[self.key]
         with codecs.open(path, encoding=self.encoding, mode='r') as stream:
             doc[self.destkey] = stream.read()
+
+
+class Savefile(Extractor):
+    def __init__(self, key='content', destkey='savepath', encoding='utf-8', clear=False):
+        super(Savefile, self).__init__()
+        self.key = key
+        self.destkey = destkey
+        self.encoding = encoding
+        self.clear = clear
+
+    def extract(self, key, doc):
+        path = doc[self.destkey]
+        with codecs.open(path, encoding=self.encoding, mode='w') as stream:
+            stream.write(doc[self.key])
+        if self.clear:
+            del doc[self.key]
