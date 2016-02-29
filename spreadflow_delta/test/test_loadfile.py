@@ -25,9 +25,6 @@ class LoadfileTestCase(TestCase):
         Test the loadfile processor.
         """
 
-        def _lower(key, doc):
-            doc['lower'] = doc['orig'].lower()
-
         sut = Loadfile(key='test_path', destkey='test_content', encoding='utf-8')
         insert = {
             'inserts': ['a'],
