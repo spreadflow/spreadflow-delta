@@ -43,7 +43,9 @@ class LoadfileTestCase(TestCase):
         matches = MatchesSendDeltaItemInvocation(expected, sut)
         send = Mock(spec=Scheduler.send)
 
-        open_mock = mock_open(read_data='rändöm'.encode('utf-8'))
+        open_mock = mock_open()
+        open_mock.return_value.read.side_effect = ('rändöm'.encode('utf-8'), b'')
+
         with patch.object(builtins, 'open', open_mock):
             sut(insert, send)
 
