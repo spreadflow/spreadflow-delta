@@ -33,8 +33,8 @@ def is_delta_empty(item):
 
 class Extractor(object):
 
-    def __init__(self, extractor):
-        self.extractor = extractor
+    def __init__(self, extract=None):
+        self._extract_func = extract
 
     def __call__(self, item, send):
         if is_delta(item) and not is_delta_empty(item):
@@ -47,7 +47,10 @@ class Extractor(object):
         Apply the extractor function on every insert.
         """
         for oid in item['inserts']:
-            self.extractor(oid, item['data'][oid])
+            self.extract(oid, item['data'][oid])
+
+    def extract(self, key, doc):
+        self._extract_func(key, doc)
 
 
 class Filter(object):
