@@ -3,6 +3,9 @@ from __future__ import division
 from __future__ import unicode_literals
 
 import codecs
+import datetime
+import errno
+import os
 
 from collections import Mapping, Iterable
 
@@ -268,3 +271,127 @@ class Savefile(Extractor):
             stream.write(doc[self.key])
         if self.clear:
             del doc[self.key]
+
+
+class LockError(RuntimeError):
+    pass
+
+class _Lockfile:
+    """A separate object allowing proper closing of a temporary file's
+    underlying file descriptor
+    """
+
+    fd = None
+    close_called = False
+
+    @classmethod
+    def open(cls, lockpath):
+        try:
+            fd = os.open(lockpath, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            return cls(fd, lockpath)
+        except OSError as err:
+            if err.errno in [errno.EAGAIN, errno.EEXIST, errno.EDEADLK, errno.ENOENT]:
+                raise LockError()
+            else:
+                raise
+
+    # Cache the unlinker so we don't get spurious errors at
+    # shutdown when the module-level "os" is None'd out.
+    def close(self, os_unlink=os.unlink, os_close=os.close):
+        if not self.close_called and self.fd is not None:
+            self.close_called = True
+            try:
+                os_close(self.fd)
+            finally:
+                os_unlink(self.lockpath)
+
+    def __init__(self, fd, lockpath):
+        self.fd = fd
+        self.lockpath = lockpath
+
+    # Need to ensure the file is deleted on __del__
+    def __del__(self):
+        self.close()
+
+
+class LockingProcessor(object):
+    def __init__(self, key='lockpath'):
+        # oid -> lock.
+        self._acquired = {}
+
+        # list of (oid, doc).
+        self._pending = []
+
+        self.key = key
+        self.out = object()
+        self.out_retry = object()
+        self.out_locked = object()
+
+    def __call__(self, item, send):
+        data = {}
+        pending = []
+
+        # Try to acquire a lockfile for all pending and new inserts.
+        for oid, doc in self._inserts(item):
+            try:
+                self._acquired[oid] = _Lockfile.open(doc[self.key])
+                data[oid] = doc
+            except LockError:
+                pending.append((oid, doc))
+
+        # Reconstruct and send the message to the locked output port.
+        pending_oids = set(oid for oid, doc in self._pending)
+        item['deletes'] = [oid for oid in item['deletes'] if oid not in pending_oids]
+        item['inserts'] = data.keys()
+        item['data'] = data
+
+        if not is_delta_empty(item):
+            send(item, self.out_locked)
+
+        # Push to retry output port.
+        self._pending = pending
+        if len(self._pending) > 0:
+            retry_item = {
+                'date': datetime.datetime.now(),
+                'deletes': (),
+                'inserts': (),
+                'data': {}
+            }
+            send(retry_item, self.out_retry)
+
+    def release(self, item, send):
+        """
+        Release the locks and send the message to the default output port.
+        """
+        for oid in item['inserts']:
+            self._acquired.pop(oid).close()
+
+        send(item, self.out)
+
+    def attach(self, dispatcher, reactor):
+        pass
+
+    def detach(self):
+        for lockfile in self._acquired.values():
+            lockfile.close()
+
+        self._acquired = {}
+        self._pending = []
+
+    def _inserts(self, item):
+        """
+        Iterates over pending and new inserts.
+        """
+        for oid, doc in self._pending:
+            if oid not in item['deletes']:
+                yield (oid, doc)
+
+        for oid in item['inserts']:
+            doc = item['data'][oid]
+            yield (oid, doc)
+
+    @property
+    def dependencies(self):
+        yield (self, self.out_locked)
+        yield (self, self.out_retry)
+        yield (self.release, self.out)
