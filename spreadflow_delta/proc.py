@@ -342,7 +342,7 @@ class LockingProcessor(object):
         # Reconstruct and send the message to the locked output port.
         pending_oids = set(oid for oid, doc in self._pending)
         item['deletes'] = [oid for oid in item['deletes'] if oid not in pending_oids]
-        item['inserts'] = data.keys()
+        item['inserts'] = list(data.keys())
         item['data'] = data
 
         if not is_delta_empty(item):
