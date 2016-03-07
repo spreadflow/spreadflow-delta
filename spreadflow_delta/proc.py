@@ -5,7 +5,10 @@ from __future__ import unicode_literals
 import codecs
 import datetime
 import errno
+import hashlib
 import os
+import shutil
+import tempfile
 
 from collections import Mapping, Iterable
 
@@ -273,6 +276,57 @@ class Savefile(Extractor):
             stream.write(doc[self.key])
         if self.clear:
             del doc[self.key]
+
+
+class Cachedir(object):
+    def __init__(self, directory=None, destkey='cachedir', hashalgo='sha1', hashseed=None):
+        self.directory = directory
+        self.destkey = destkey
+        self.hashalgo = hashalgo
+        self.hashseed = hashseed
+        self.hashobj = None
+        self.slicelen = 2
+        self._dirclean = False
+
+    def __call__(self, item, send):
+        if is_delta(item):
+            if self.directory is None:
+                self.directory = tempfile.mkdtemp()
+                self._dirclean = True
+
+            oids = set(item['deletes'] + item['inserts'])
+            pathmap = self._generate_pathmap(self.directory, oids)
+
+            for oid, path in pathmap.items():
+                shutil.rmtree(path, ignore_errors=(oid in item['inserts']))
+
+            for oid in item['inserts']:
+                path = pathmap[oid]
+                os.makedirs(path)
+                item['data'][oid][self.destkey] = path
+
+        send(item, self)
+
+    def detach(self):
+        if self._dirclean:
+            shutil.rmtree(self.directory, ignore_errors=True)
+
+    def _generate_pathmap(self, basedir, oids):
+        result = {}
+
+        if self.hashobj is None:
+            self.hashobj = hashlib.new(self.hashalgo)
+            if self.hashseed is not None:
+                self.hashobj.update(self.hashseed)
+
+        for oid in oids:
+            hashobj = self.hashobj.copy()
+            hashobj.update(str(oid).encode('utf-8'))
+            digest = hashobj.hexdigest()
+            outer, inner = digest[:self.slicelen], digest[self.slicelen:]
+            result[oid] = os.path.join(basedir, outer, inner)
+
+        return result
 
 
 class LockError(RuntimeError):
