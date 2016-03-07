@@ -250,6 +250,16 @@ class MapReduce(object):
         return keys_inserted
 
 
+class SetComputedValue(Extractor):
+    def __init__(self, destkey, func):
+        super(SetComputedValue, self).__init__()
+        self.destkey = destkey
+        self.func = func
+
+    def extract(self, key, doc):
+        doc[self.destkey] = self.func(key, doc)
+
+
 class Loadfile(Extractor):
     def __init__(self, key='path', destkey='content', encoding='utf-8'):
         super(Loadfile, self).__init__()
