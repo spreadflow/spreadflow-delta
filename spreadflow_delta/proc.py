@@ -9,6 +9,7 @@ import hashlib
 import os
 import shutil
 import tempfile
+import urllib
 
 from collections import Mapping, Iterable
 
@@ -288,6 +289,20 @@ class Symlink(Extractor):
         path = doc[self.key]
         linkpath = doc[self.destkey]
         os.symlink(path, linkpath)
+
+
+class Fileurl(Extractor):
+    def __init__(self, key='savepath', destkey='content_url', basedir='', baseurl=''):
+        super(Fileurl, self).__init__()
+        self.key = key
+        self.destkey = destkey
+        self.basedir = basedir
+        self.baseurl = baseurl
+
+    def extract(self, key, doc):
+        assert doc[self.key].startswith(self.basedir), 'Cannot generate URLs for files outside of the basedir'
+        relpath = doc[self.key][len(self.basedir):].lstrip('/')
+        doc[self.destkey] = self.baseurl + urllib.quote(relpath.encode('utf-8'))
 
 
 class Cachedir(object):
