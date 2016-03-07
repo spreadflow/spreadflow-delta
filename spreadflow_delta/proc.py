@@ -9,7 +9,11 @@ import hashlib
 import os
 import shutil
 import tempfile
-import urllib
+
+try:
+    from urllib.parse import quote as urlquote
+except ImportError:
+    from urllib import quote as urlquote
 
 from collections import Mapping, Iterable
 
@@ -312,7 +316,7 @@ class Fileurl(Extractor):
     def extract(self, key, doc):
         assert doc[self.key].startswith(self.basedir), 'Cannot generate URLs for files outside of the basedir'
         relpath = doc[self.key][len(self.basedir):].lstrip('/')
-        doc[self.destkey] = self.baseurl + urllib.quote(relpath.encode('utf-8'))
+        doc[self.destkey] = self.baseurl + urlquote(relpath.encode('utf-8'))
 
 
 class ContentHash(Extractor):
