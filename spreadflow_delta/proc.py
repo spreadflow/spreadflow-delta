@@ -305,6 +305,29 @@ class Fileurl(Extractor):
         doc[self.destkey] = self.baseurl + urllib.quote(relpath.encode('utf-8'))
 
 
+class ContentHash(Extractor):
+    def __init__(self, key='content', destkey='content_hash', encoding='utf-8', hashalgo='sha1', hashseed=None):
+        super(ContentHash, self).__init__()
+        self.key = key
+        self.destkey = destkey
+        self.encoding = encoding
+        self.hashalgo = hashalgo
+        self.hashseed = hashseed
+        self.hashobj = None
+
+    def extract(self, key, doc):
+        if self.hashobj is None:
+            self.hashobj = hashlib.new(self.hashalgo)
+            if self.hashseed is not None:
+                self.hashobj.update(self.hashseed)
+
+        content = doc[self.key]
+        if self.encoding is not None:
+            content = content.encode('utf-8')
+
+        doc[self.destkey] = hashlib.sha1(content).hexdigest()
+
+
 class Cachedir(object):
     def __init__(self, directory=None, destkey='cachedir', hashalgo='sha1', hashseed=None):
         self.directory = directory
