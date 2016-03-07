@@ -278,6 +278,18 @@ class Savefile(Extractor):
             del doc[self.key]
 
 
+class Symlink(Extractor):
+    def __init__(self, key='path', destkey='linkpath'):
+        super(Symlink, self).__init__()
+        self.key = key
+        self.destkey = destkey
+
+    def extract(self, key, doc):
+        path = doc[self.key]
+        linkpath = doc[self.destkey]
+        os.symlink(path, linkpath)
+
+
 class Cachedir(object):
     def __init__(self, directory=None, destkey='cachedir', hashalgo='sha1', hashseed=None):
         self.directory = directory
