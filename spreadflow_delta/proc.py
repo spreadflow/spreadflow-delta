@@ -38,8 +38,10 @@ def is_delta_empty(item):
 
 class Extractor(object):
 
-    def __init__(self, extract=None):
+    def __init__(self, extract=None, *args, **kwds):
         self._extract_func = extract
+        self._extract_args = args
+        self._extract_kwds = kwds
 
     def __call__(self, item, send):
         if is_delta(item) and not is_delta_empty(item):
@@ -55,7 +57,7 @@ class Extractor(object):
             self.extract(oid, item['data'][oid])
 
     def extract(self, key, doc):
-        self._extract_func(key, doc)
+        self._extract_func(key, doc, *self._extract_args, **self._extract_kwds)
 
 
 class Filter(object):
