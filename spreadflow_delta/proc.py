@@ -114,32 +114,18 @@ class Filter(object):
         msg['data'] = data
 
 
-class MapReduce(object):
+class MapReduceBase(object):
 
-    @staticmethod
-    def map_default(key, value):
+    def map(self, key, value):
         yield key, value
 
 
-    @staticmethod
-    def map_chain(*map_funcs):
-        def map_func(key, value):
-            for f in map_funcs:
-                for i in f(key, value):
-                    yield i
-
-        return map_func
-
-
-    @staticmethod
-    def reduce_default(key, values):
+    def reduce(self, key, values):
         return {k: v for doc in values for k, v in doc.items()}
 
 
-    @staticmethod
-    def finalize_default(key, value):
+    def finalize(self, key, value):
         return value
-
 
     SORT_DEFAULT = {
         'key': lambda triple: triple[0]
@@ -151,11 +137,8 @@ class MapReduce(object):
 
         return defer.succeed(iterator)
 
-    def __init__(self, map=None, reduce=None, finalize=None, sort=None, coiterate=None):
-        self.map = map if map else self.map_default
-        self.reduce = reduce if reduce else self.reduce_default
-        self.finalize = finalize if finalize else self.finalize_default
-        self.sort = sort if sort else self.SORT_DEFAULT
+    def __init__(self, coiterate=None):
+        self.sort = self.SORT_DEFAULT
 
         if coiterate == True:
             from twisted.internet.task import coiterate
@@ -258,6 +241,52 @@ class MapReduce(object):
         keys_inserted = set(columns[0])
         self._triples += list(zip(*columns))
         return keys_inserted
+
+
+class MapReduce(MapReduceBase):
+
+    @staticmethod
+    def map_default(key, value):
+        yield key, value
+
+
+    @staticmethod
+    def map_chain(*map_funcs):
+        def map_func(key, value):
+            for f in map_funcs:
+                for i in f(key, value):
+                    yield i
+
+        return map_func
+
+
+    @staticmethod
+    def reduce_default(key, values):
+        return {k: v for doc in values for k, v in doc.items()}
+
+
+    @staticmethod
+    def finalize_default(key, value):
+        return value
+
+
+    def __init__(self, map=None, reduce=None, finalize=None, sort=None, coiterate=None):
+        super(MapReduce, self).__init__(coiterate=coiterate)
+        self._map_func = map if map else self.map_default
+        self._reduce_func = reduce if reduce else self.reduce_default
+        self._finalize_func = finalize if finalize else self.finalize_default
+        self.sort = sort if sort else self.SORT_DEFAULT
+
+    def map(self, key, value):
+        for item in self._map_func(key, value):
+            yield item
+
+    def reduce(self, key, values):
+        return self._reduce_func(key, values)
+
+
+    def finalize(self, key, value):
+        return self._finalize_func(key, value)
 
 
 class SetComputedValue(ExtractorBase):
