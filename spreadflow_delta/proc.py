@@ -44,25 +44,31 @@ def is_delta_empty(item):
     return len(item['inserts']) == 0 and len(item['deletes']) == 0
 
 
-class Extractor(object):
-
-    def __init__(self, extract=None, *args, **kwds):
-        self._extract_func = extract
-        self._extract_args = args
-        self._extract_kwds = kwds
+class ExtractorBase(object):
+    """
+    Abstract base class for extractors.
+    """
 
     def __call__(self, item, send):
         if is_delta(item) and not is_delta_empty(item):
-            self._extract(item)
+            for oid in item['inserts']:
+                self.extract(oid, item['data'][oid])
 
         send(item, self)
 
-    def _extract(self, item):
+    def extract(self, key, doc):
         """
-        Apply the extractor function on every insert.
+        Change the incoming insertable document.
         """
-        for oid in item['inserts']:
-            self.extract(oid, item['data'][oid])
+        raise NotImplementedError("Subclasses must implement this method")
+
+
+class Extractor(ExtractorBase):
+
+    def __init__(self, func, *args, **kwds):
+        self._extract_func = func
+        self._extract_args = args
+        self._extract_kwds = kwds
 
     def extract(self, key, doc):
         self._extract_func(key, doc, *self._extract_args, **self._extract_kwds)
@@ -254,9 +260,8 @@ class MapReduce(object):
         return keys_inserted
 
 
-class SetComputedValue(Extractor):
+class SetComputedValue(ExtractorBase):
     def __init__(self, destkey, func):
-        super(SetComputedValue, self).__init__()
         self.destkey = destkey
         self.func = func
 
@@ -264,9 +269,8 @@ class SetComputedValue(Extractor):
         doc[self.destkey] = self.func(key, doc)
 
 
-class Loadfile(Extractor):
+class Loadfile(ExtractorBase):
     def __init__(self, key='path', destkey='content', encoding='utf-8'):
-        super(Loadfile, self).__init__()
         self.key = key
         self.destkey = destkey
         self.encoding = encoding
@@ -277,9 +281,8 @@ class Loadfile(Extractor):
             doc[self.destkey] = stream.read()
 
 
-class Savefile(Extractor):
+class Savefile(ExtractorBase):
     def __init__(self, key='content', destkey='savepath', encoding='utf-8', clear=False):
-        super(Savefile, self).__init__()
         self.key = key
         self.destkey = destkey
         self.encoding = encoding
@@ -293,9 +296,8 @@ class Savefile(Extractor):
             del doc[self.key]
 
 
-class Symlink(Extractor):
+class Symlink(ExtractorBase):
     def __init__(self, key='path', destkey='linkpath'):
-        super(Symlink, self).__init__()
         self.key = key
         self.destkey = destkey
 
@@ -305,9 +307,8 @@ class Symlink(Extractor):
         os.symlink(path, linkpath)
 
 
-class Fileurl(Extractor):
+class Fileurl(ExtractorBase):
     def __init__(self, key='savepath', destkey='content_url', basedir='', baseurl=''):
-        super(Fileurl, self).__init__()
         self.key = key
         self.destkey = destkey
         self.basedir = basedir
@@ -319,9 +320,8 @@ class Fileurl(Extractor):
         doc[self.destkey] = self.baseurl + urlquote(relpath.encode('utf-8'))
 
 
-class ContentHash(Extractor):
+class ContentHash(ExtractorBase):
     def __init__(self, key='content', destkey='content_hash', encoding='utf-8', hashalgo='sha1', hashseed=None):
-        super(ContentHash, self).__init__()
         self.key = key
         self.destkey = destkey
         self.encoding = encoding
