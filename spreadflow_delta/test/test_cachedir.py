@@ -123,3 +123,39 @@ class CachedirTestCase(TestCase):
             sut.detach()
 
         rmtree_mock.assert_called_once_with(expected_dir, ignore_errors=True)
+
+    def test_noclean_cachedir(self):
+        """
+        Test the cache directory processor if clean-flag is unset.
+        """
+
+        sut = Cachedir(directory='/path/to/testdir', destkey='test_cachedir', clean=False)
+
+        # insert operation.
+        insert = {
+            'inserts': ['a'],
+            'deletes': [],
+            'data': {
+                'a': {}
+            }
+        }
+        expected = copy.deepcopy(insert)
+
+        # >>> hashlib.sha1('a').hexdigest()
+        # '86f7e437faa5a7fce15d1ddcb9eaeaea377667b8'
+        expected_path = '/path/to/testdir/86/f7e437faa5a7fce15d1ddcb9eaeaea377667b8'
+        expected['data']['a']['test_cachedir'] = expected_path
+
+        matches = MatchesSendDeltaItemInvocation(expected, sut)
+        send = Mock(spec=Scheduler.send)
+        with patch('tempfile.mkdtemp', spec=tempfile.mkdtemp) as mkdtemp_mock:
+            with patch('os.makedirs', spec=os.makedirs) as makedirs_mock:
+                with patch('shutil.rmtree', spec=shutil.rmtree) as rmtree_mock:
+                    sut(insert, send)
+
+        self.assertEquals(send.call_count, 1)
+        self.assertThat(send.call_args, matches)
+
+        self.assertEquals(mkdtemp_mock.call_count, 0)
+        self.assertEquals(rmtree_mock.call_count, 0)
+        makedirs_mock.assert_called_once_with(expected_path)

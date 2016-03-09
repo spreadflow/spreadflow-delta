@@ -428,11 +428,12 @@ class ContentHash(ExtractorBase):
 
 
 class Cachedir(object):
-    def __init__(self, directory=None, destkey='cachedir', hashalgo='sha1', hashseed=None):
+    def __init__(self, directory=None, destkey='cachedir', hashalgo='sha1', hashseed=None, clean=True):
         self.directory = directory
         self.destkey = destkey
         self.hashalgo = hashalgo
         self.hashseed = hashseed
+        self.clean = clean
         self.hashobj = None
         self.slicelen = 2
         self._dirclean = False
@@ -446,8 +447,9 @@ class Cachedir(object):
             oids = set(item['deletes'] + item['inserts'])
             pathmap = self._generate_pathmap(self.directory, oids)
 
-            for oid, path in pathmap.items():
-                shutil.rmtree(path, ignore_errors=(oid in item['inserts']))
+            if self.clean:
+                for oid, path in pathmap.items():
+                    shutil.rmtree(path, ignore_errors=(oid in item['inserts']))
 
             for oid in item['inserts']:
                 path = pathmap[oid]
