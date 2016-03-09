@@ -245,15 +245,6 @@ class MapReduceBase(object):
 
 class MapReduce(MapReduceBase):
 
-    @staticmethod
-    def map_chain(*map_funcs):
-        def map_func(key, value):
-            for f in map_funcs:
-                for i in f(key, value):
-                    yield i
-
-        return map_func
-
     def __init__(self, map=None, reduce=None, finalize=None, sort=None, coiterate=None):
         super(MapReduce, self).__init__(coiterate=coiterate)
         self._map_func = map if map else super(MapReduce, self).map

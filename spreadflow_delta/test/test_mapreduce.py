@@ -167,44 +167,6 @@ class MapReduceTestCase(TestCase):
         self.assertThat(send.call_args, matches)
 
     @defer.inlineCallbacks
-    def test_map_chain(self):
-        """
-        Test chaining of mapper functions.
-        """
-        def map1(key, doc):
-            yield 'a', {}
-            yield 'c', {}
-
-        def map2(key, doc):
-            yield 'b', {}
-
-        map_chain = MapReduce.map_chain(map1, map2)
-
-        sut = MapReduce(map=map_chain)
-        insert = {
-            'inserts': ['x', 'y'],
-            'deletes': [],
-            'data': {
-                'x': {},
-                'y': {}
-            }
-        }
-        expected = {
-            'inserts': ['a', 'b', 'c'],
-            'deletes': [],
-            'data': {
-                'a': {},
-                'b': {},
-                'c': {}
-            }
-        }
-        matches = MatchesSendDeltaItemInvocation(expected, sut)
-        send = Mock(spec=Scheduler.send)
-        yield sut(insert, send)
-        self.assertEquals(send.call_count, 1)
-        self.assertThat(send.call_args, matches)
-
-    @defer.inlineCallbacks
     def test_term_frequency_with_update(self):
         """
         Test example implementation of term frequency analysis.
