@@ -375,8 +375,22 @@ class Savefile(ExtractorBase):
 
     def extract(self, key, doc):
         path = doc[self.destkey]
-        with codecs.open(path, encoding=self.encoding, mode='w') as stream:
+        (tmpfd, tmppath) = tempfile.mkstemp(dir=os.path.dirname(path))
+
+        tmp = os.fdopen(tmpfd, 'wb')
+        if self.encoding is None:
+            stream = tmp
+        else:
+            # @see codecs.open
+            info = codecs.lookup(self.encoding)
+            stream = codecs.StreamReaderWriter(tmp, info.streamreader, info.streamwriter)
+            # Add attributes to simplify introspection
+            stream.encoding = self.encoding
+
+        with stream:
             stream.write(doc[self.key])
+
+        os.rename(tmppath, path)
         if self.clear:
             del doc[self.key]
 
@@ -389,7 +403,12 @@ class Symlink(ExtractorBase):
     def extract(self, key, doc):
         path = doc[self.key]
         linkpath = doc[self.destkey]
-        os.symlink(path, linkpath)
+
+        tmppath = tempfile.mkdtemp(dir=os.path.dirname(linkpath))
+        tmplink = os.tempnam(tmppath)
+        os.symlink(path, tmplink)
+        os.rename(tmplink, linkpath)
+        os.rmdir(tmppath)
 
 
 class Fileurl(ExtractorBase):
@@ -453,7 +472,13 @@ class Cachedir(object):
 
             for oid in item['inserts']:
                 path = pathmap[oid]
-                os.makedirs(path)
+
+                try:
+                    os.makedirs(path)
+                except OSError, err:
+                    if self.clean or err.errno != errno.EEXIST:
+                        raise
+
                 item['data'][oid][self.destkey] = path
 
         send(item, self)
