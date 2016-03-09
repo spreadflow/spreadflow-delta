@@ -7,11 +7,16 @@ from spreadflow_core.test.matchers import MatchesInvocation
 
 class MatchesDeltaItem(matchers.MatchesDict):
     def __init__(self, item):
-        super(MatchesDeltaItem, self).__init__({
+        spec = {
             'data': matchers.Equals(item['data']),
             'inserts': matchers.MatchesSetwise(*[matchers.Equals(oid) for oid in item['inserts']]),
             'deletes': matchers.MatchesSetwise(*[matchers.Equals(oid) for oid in item['deletes']])
-        })
+        }
+
+        if 'parent' in item:
+            spec['parent'] = MatchesDeltaItem(item['parent'])
+
+        super(MatchesDeltaItem, self).__init__(spec)
 
 class MatchesSendDeltaItemInvocation(MatchesInvocation):
     def __init__(self, expected_item, expected_port):

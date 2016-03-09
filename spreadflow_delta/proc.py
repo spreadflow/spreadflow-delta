@@ -264,6 +264,87 @@ class MapReduce(MapReduceBase):
         return self._finalize_func(key, value)
 
 
+class UnpackBase(object):
+    def __init__(self):
+        self._subdocs = {}
+
+    def __call__(self, item, send):
+        if is_delta(item):
+            unpacked_deletes = []
+            unpacked_inserts = []
+            unpacked_data = {}
+
+            for oid in set(item['deletes'] + item['inserts']):
+                for suboid in self._subdocs.pop(oid, []):
+                    unpacked_deletes.append((oid, suboid))
+
+            for oid in item['inserts']:
+                self._subdocs[oid] = []
+                for suboid, subdoc in self.unpack(oid, item['data'][oid]):
+                    unpacked_data[(oid, suboid)] = subdoc
+                    self._subdocs[oid].append(suboid)
+
+            unpacked_item = {
+                'inserts': list(unpacked_data.keys()),
+                'deletes': unpacked_deletes,
+                'data': unpacked_data,
+                'parent': item
+            }
+            send(unpacked_item, self)
+
+        else:
+            send(item, self)
+
+    def unpack(self, oid, doc):
+        """
+        Generate subdocuments from the incoming insertable document.
+        """
+        raise NotImplementedError("Subclasses must implement this method")
+
+
+class UnpackMapping(UnpackBase):
+    def __init__(self, keys=None):
+        super(UnpackMapping, self).__init__()
+        self.keys = keys
+
+    def unpack(self, oid, doc):
+        for key, value  in doc.items():
+            if self.keys is None or key in self.keys:
+                yield key, value
+
+
+class UnpackSequence(UnpackBase):
+    def __init__(self, start=None, stop=None, step=None):
+        super(UnpackSequence, self).__init__()
+        self.start = start
+        self.stop = stop
+        self.step = step
+
+    def unpack(self, oid, doc):
+        return enumerate(doc[self.start:self.stop:self.step])
+
+
+class Repack(object):
+    def __call__(self, item, send):
+        if is_delta(item):
+            packed_item = item.pop('parent')
+            for oid, suboid in sorted(item['deletes'], reverse=True):
+                del packed_item['data'][oid][suboid]
+
+            for oid, suboid in sorted(item['inserts']):
+                doc = packed_item['data'][oid]
+                subdoc = item['data'][(oid, suboid)]
+                for key, value in self.pack(suboid, subdoc, oid, doc):
+                    doc[key] = value
+
+            send(packed_item, self)
+        else:
+            send(item, self)
+
+    def pack(self, suboid, subdoc, oid, doc):
+        yield suboid, subdoc
+
+
 class SetComputedValue(ExtractorBase):
     def __init__(self, destkey, func):
         self.destkey = destkey
