@@ -246,11 +246,6 @@ class MapReduceBase(object):
 class MapReduce(MapReduceBase):
 
     @staticmethod
-    def map_default(key, value):
-        yield key, value
-
-
-    @staticmethod
     def map_chain(*map_funcs):
         def map_func(key, value):
             for f in map_funcs:
@@ -259,22 +254,11 @@ class MapReduce(MapReduceBase):
 
         return map_func
 
-
-    @staticmethod
-    def reduce_default(key, values):
-        return {k: v for doc in values for k, v in doc.items()}
-
-
-    @staticmethod
-    def finalize_default(key, value):
-        return value
-
-
     def __init__(self, map=None, reduce=None, finalize=None, sort=None, coiterate=None):
         super(MapReduce, self).__init__(coiterate=coiterate)
-        self._map_func = map if map else self.map_default
-        self._reduce_func = reduce if reduce else self.reduce_default
-        self._finalize_func = finalize if finalize else self.finalize_default
+        self._map_func = map if map else super(MapReduce, self).map
+        self._reduce_func = reduce if reduce else super(MapReduce, self).reduce
+        self._finalize_func = finalize if finalize else super(MapReduce, self).finalize
         self.sort = sort if sort else self.SORT_DEFAULT
 
     def map(self, key, value):
