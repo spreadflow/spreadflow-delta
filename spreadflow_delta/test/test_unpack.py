@@ -10,46 +10,50 @@ from testtools import TestCase
 from spreadflow_core.scheduler import Scheduler
 from spreadflow_delta.test.matchers import MatchesSendDeltaItemInvocation
 
-from spreadflow_delta.proc import UnpackMapping, UnpackSequence, Repack
+from spreadflow_delta.proc import Unpack, UnpackSequence, Repack, RepackSequence
 
 class UnpackTestCase(TestCase):
 
     def test_unpack_repack(self):
-        unpackmap = UnpackMapping(keys=['m'])
-        unpacklist = UnpackSequence()
-        repacklist = Repack()
-        repackmap = Repack()
+        unpackmap = Unpack('d')
+        unpacklist = UnpackSequence('m')
+        repacklist = RepackSequence('m')
+        repackmap = Repack('d')
 
         insert_orig = {
             'inserts': ['a'],
             'deletes': [],
             'data': {
                 'a': {
-                    'm': ['a', 'b', 'c'],
+                    'd': {
+                        'm': ['a', 'b', 'c'],
+                    }
                 },
             }
         }
 
         insert_expected_map = {
-            'inserts': [('a', 'm')],
+            'inserts': [('a', 'd', None)],
             'deletes': [],
             'data': {
-                ('a', 'm'): ['a', 'b', 'c'],
+                ('a', 'd', None): {
+                    'm': ['a', 'b', 'c'],
+                }
             },
             'parent': insert_orig,
         }
 
         insert_expected_list = {
             'inserts': [
-                (('a', 'm'), 0),
-                (('a', 'm'), 1),
-                (('a', 'm'), 2),
+                (('a', 'd', None), 'm', 0),
+                (('a', 'd', None), 'm', 1),
+                (('a', 'd', None), 'm', 2),
             ],
             'deletes': [],
             'data': {
-                (('a', 'm'), 0): 'a',
-                (('a', 'm'), 1): 'b',
-                (('a', 'm'), 2): 'c',
+                (('a', 'd', None), 'm', 0): 'a',
+                (('a', 'd', None), 'm', 1): 'b',
+                (('a', 'd', None), 'm', 2): 'c',
             },
             'parent': insert_expected_map,
         }
