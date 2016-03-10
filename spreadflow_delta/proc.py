@@ -469,7 +469,7 @@ class Cachedir(object):
 
                 try:
                     os.makedirs(path)
-                except OSError, err:
+                except OSError as err:
                     if self.clean or err.errno != errno.EEXIST:
                         raise
 
