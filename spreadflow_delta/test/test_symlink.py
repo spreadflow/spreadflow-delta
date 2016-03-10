@@ -35,7 +35,7 @@ class SymlinkTestCase(TestCase):
         matches = MatchesSendDeltaItemInvocation(expected, sut)
         send = Mock(spec=Scheduler.send)
 
-        with patch('os.symlink') as symlink_mock:
+        with patch('spreadflow_delta.util.symlink_replace') as symlink_mock:
             sut(insert, send)
 
         self.assertEquals(send.call_count, 1)
