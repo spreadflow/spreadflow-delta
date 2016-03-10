@@ -19,6 +19,8 @@ from collections import Mapping, Iterable
 
 from twisted.internet import defer
 
+from spreadflow_delta import util
+
 
 def is_delta(item):
     """
@@ -375,22 +377,18 @@ class Savefile(ExtractorBase):
 
     def extract(self, key, doc):
         path = doc[self.destkey]
-        (tmpfd, tmppath) = tempfile.mkstemp(dir=os.path.dirname(path))
+        tmpdir = os.path.dirname(path)
 
-        tmp = os.fdopen(tmpfd, 'wb')
-        if self.encoding is None:
-            stream = tmp
+        stream = util.EncodedTemporaryFile(encoding=self.encoding, dir=tmpdir, delete=False)
+        try:
+            with stream:
+                stream.write(doc[self.key])
+        except:
+            os.unlink(stream.name)
+            raise
         else:
-            # @see codecs.open
-            info = codecs.lookup(self.encoding)
-            stream = codecs.StreamReaderWriter(tmp, info.streamreader, info.streamwriter)
-            # Add attributes to simplify introspection
-            stream.encoding = self.encoding
+            os.rename(stream.name, path)
 
-        with stream:
-            stream.write(doc[self.key])
-
-        os.rename(tmppath, path)
         if self.clear:
             del doc[self.key]
 
@@ -404,11 +402,7 @@ class Symlink(ExtractorBase):
         path = doc[self.key]
         linkpath = doc[self.destkey]
 
-        tmppath = tempfile.mkdtemp(dir=os.path.dirname(linkpath))
-        tmplink = os.tempnam(tmppath)
-        os.symlink(path, tmplink)
-        os.rename(tmplink, linkpath)
-        os.rmdir(tmppath)
+        util.symlink_replace(path, linkpath)
 
 
 class Fileurl(ExtractorBase):
