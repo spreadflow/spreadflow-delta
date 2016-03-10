@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import unicode_literals
 
 import codecs
+import collections
 import datetime
 import errno
 import hashlib
@@ -15,8 +16,6 @@ try:
 except ImportError:
     from urllib import quote as urlquote
 
-from collections import Mapping, Iterable
-
 from twisted.internet import defer
 
 from spreadflow_delta import util
@@ -27,16 +26,16 @@ def is_delta(item):
     Returns True if the given item looks like a delta message.
     """
 
-    if not isinstance(item, Mapping):
+    if not isinstance(item, collections.Mapping):
         return False
 
-    if not 'inserts' in item or not isinstance(item['inserts'], Iterable):
+    if not 'inserts' in item or not isinstance(item['inserts'], collections.Iterable):
         return False
 
-    if not 'deletes' in item or not isinstance(item['deletes'], Iterable):
+    if not 'deletes' in item or not isinstance(item['deletes'], collections.Iterable):
         return False
 
-    if not 'data' in item or not isinstance(item['data'], Mapping):
+    if not 'data' in item or not isinstance(item['data'], collections.Mapping):
         return False
 
     return True
