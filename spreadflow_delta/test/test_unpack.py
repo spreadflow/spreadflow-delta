@@ -10,15 +10,15 @@ from testtools import TestCase
 from spreadflow_core.scheduler import Scheduler
 from spreadflow_delta.test.matchers import MatchesSendDeltaItemInvocation
 
-from spreadflow_delta.proc import Unpack, UnpackSequence, Repack, RepackSequence
+from spreadflow_delta.proc import UnpackValue, UnpackSequence, RepackValue, RepackSequence
 
 class UnpackTestCase(TestCase):
 
     def test_unpack_repack(self):
-        unpackmap = Unpack('d')
+        unpackmap = UnpackValue('d')
         unpacklist = UnpackSequence('m')
         repacklist = RepackSequence('m')
-        repackmap = Repack('d')
+        repackmap = RepackValue('d')
 
         insert_orig = {
             'inserts': ['a'],
@@ -33,10 +33,10 @@ class UnpackTestCase(TestCase):
         }
 
         insert_expected_map = {
-            'inserts': [('a', 'd', None)],
+            'inserts': [('a', 'd', 0)],
             'deletes': [],
             'data': {
-                ('a', 'd', None): {
+                ('a', 'd', 0): {
                     'm': ['a', 'b', 'c'],
                 }
             },
@@ -45,15 +45,15 @@ class UnpackTestCase(TestCase):
 
         insert_expected_list = {
             'inserts': [
-                (('a', 'd', None), 'm', 0),
-                (('a', 'd', None), 'm', 1),
-                (('a', 'd', None), 'm', 2),
+                (('a', 'd', 0), 'm', 0),
+                (('a', 'd', 0), 'm', 1),
+                (('a', 'd', 0), 'm', 2),
             ],
             'deletes': [],
             'data': {
-                (('a', 'd', None), 'm', 0): 'a',
-                (('a', 'd', None), 'm', 1): 'b',
-                (('a', 'd', None), 'm', 2): 'c',
+                (('a', 'd', 0), 'm', 0): 'a',
+                (('a', 'd', 0), 'm', 1): 'b',
+                (('a', 'd', 0), 'm', 2): 'c',
             },
             'parent': insert_expected_map,
         }

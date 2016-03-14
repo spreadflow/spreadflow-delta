@@ -265,7 +265,7 @@ class MapReduce(MapReduceBase):
         return self._finalize_func(key, value)
 
 
-class Unpack(object):
+class UnpackBase(object):
     def __init__(self, key):
         self._subdocs = {}
         self.key = key
@@ -277,14 +277,14 @@ class Unpack(object):
             unpacked_data = {}
 
             for oid in set(item['deletes'] + item['inserts']):
-                for suboid in self._subdocs.pop(oid, []):
-                    unpacked_deletes.append((oid, self.key, suboid))
+                for idx in self._subdocs.pop(oid, []):
+                    unpacked_deletes.append((oid, self.key, idx))
 
             for oid in item['inserts']:
                 self._subdocs[oid] = []
-                for suboid, subdoc in self.unpack(oid, item['data'][oid]):
-                    unpacked_data[(oid, self.key, suboid)] = subdoc
-                    self._subdocs[oid].append(suboid)
+                for idx, subdoc in enumerate(self.unpack(oid, item['data'][oid])):
+                    unpacked_data[(oid, self.key, idx)] = subdoc
+                    self._subdocs[oid].append(idx)
 
             unpacked_item = {
                 'inserts': list(unpacked_data.keys()),
@@ -298,10 +298,17 @@ class Unpack(object):
             send(item, self)
 
     def unpack(self, oid, doc):
-        yield None, doc[self.key]
+        """
+        Unpack a document into a list of subdocuments.
+        """
 
 
-class UnpackSequence(Unpack):
+class UnpackValue(UnpackBase):
+    def unpack(self, oid, doc):
+        yield doc[self.key]
+
+
+class UnpackSequence(UnpackBase):
     def __init__(self, key, start=None, stop=None, step=None):
         super(UnpackSequence, self).__init__(key)
         self.start = start
@@ -309,33 +316,22 @@ class UnpackSequence(Unpack):
         self.step = step
 
     def unpack(self, oid, doc):
-        return enumerate(doc[self.key][self.start:self.stop:self.step])
+        return doc[self.key][self.start:self.stop:self.step]
 
 
-class Repack(object):
-    def __init__(self, destkey, default=None):
+class Unpack(UnpackBase):
+    def __init__(self, key, func):
+        super(Unpack, self).__init__(key)
+        self.func = func
+
+    def unpack(self, oid, doc):
+        for item in self.func(oid, doc):
+            yield item
+
+
+class RepackBase(object):
+    def __init__(self, destkey):
         self.destkey = destkey
-        self.default = default
-
-    def __call__(self, item, send):
-        if is_delta(item):
-            packed_item = item.pop('parent')
-
-            data = dict()
-            for subkey in item['inserts']:
-                data[subkey[0]] = item['data'][subkey]
-
-            for oid in packed_item['inserts']:
-                packed_item['data'][oid][self.destkey] = data.get(oid, self.default)
-
-            send(packed_item, self)
-        else:
-            send(item, self)
-
-class RepackSequence(object):
-    def __init__(self, destkey, factory=list):
-        self.destkey = destkey
-        self.factory = factory
 
     def __call__(self, item, send):
         if is_delta(item):
@@ -346,11 +342,49 @@ class RepackSequence(object):
                 lists[subkey[0]].append(item['data'][subkey])
 
             for oid in packed_item['inserts']:
-                packed_item['data'][oid][self.destkey] = self.factory(lists[oid])
+                packed_item['data'][oid][self.destkey] = self.pack(oid, lists[oid])
 
             send(packed_item, self)
         else:
             send(item, self)
+
+    def pack(self, oid, values):
+        """
+        Repack values into the document identified by the oid.
+        """
+        raise NotImplementedError("Subclasses must implement this method")
+
+
+class RepackValue(RepackBase):
+    def __init__(self, destkey, default=None):
+        super(RepackValue, self).__init__(destkey)
+        self.default = default
+
+    def pack(self, oid, values):
+        try:
+            result = values[0]
+        except IndexError:
+            result = self.default
+
+        return result
+
+
+class RepackSequence(RepackBase):
+    def __init__(self, destkey, factory=list):
+        super(RepackSequence, self).__init__(destkey)
+        self.factory = factory
+
+    def pack(self, oid, values):
+        return self.factory(values)
+
+
+class Repack(RepackBase):
+    def __init__(self, destkey, func):
+        super(Repack, self).__init__(destkey)
+        self.func = func
+
+    def pack(self, oid, values):
+        return self.func(values)
 
 
 class SetComputedValue(ExtractorBase):
