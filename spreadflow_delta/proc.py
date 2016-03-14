@@ -383,17 +383,9 @@ class Savefile(ExtractorBase):
 
     def extract(self, key, doc):
         path = doc[self.destkey]
-        tmpdir = os.path.dirname(path)
 
-        stream = util.EncodedTemporaryFile(encoding=self.encoding, dir=tmpdir, delete=False)
-        try:
-            with stream:
-                stream.write(doc[self.key])
-        except:
-            os.unlink(stream.name)
-            raise
-        else:
-            os.rename(stream.name, path)
+        with util.open_replace(path, encoding=self.encoding) as stream:
+            stream.write(doc[self.key])
 
         if self.clear:
             del doc[self.key]

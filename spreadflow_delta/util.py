@@ -6,6 +6,7 @@ import codecs
 import os
 import tempfile
 import uuid
+from contextlib import contextmanager
 
 def EncodedTemporaryFile(encoding=None, *args, **kwds):
     tmp = tempfile.NamedTemporaryFile(*args, **kwds)
@@ -21,6 +22,19 @@ def EncodedTemporaryFile(encoding=None, *args, **kwds):
         stream.name = tmp.name
 
     return stream
+
+@contextmanager
+def open_replace(path, encoding=None):
+    tmpdir = os.path.dirname(path)
+
+    try:
+        with EncodedTemporaryFile(encoding=encoding, dir=tmpdir, delete=False) as stream:
+            yield stream
+    except:
+        os.unlink(stream.name)
+        raise
+    else:
+        os.rename(stream.name, path)
 
 def symlink_replace(src, dst):
     tmppath = tempfile.mkdtemp(dir=os.path.dirname(dst))
