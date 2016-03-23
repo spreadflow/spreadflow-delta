@@ -85,31 +85,35 @@ class LockTestCase(TestCase):
         lock_mock = Mock(spec=_Lockfile)
 
         # Try-fail lock
-        expected = copy.deepcopy(insert)
-        matches = MatchesSendDeltaItemInvocation(expected, sut.out_retry)
+        expected_try = {
+            'inserts': [],
+            'deletes': [],
+            'data': {},
+            'date': 'DATESTAMP'
+        }
+        expected_retry = copy.deepcopy(insert)
+        matches = MatchesSendDeltaItemInvocation(expected_try, sut.out_retry)
         send = Mock(spec=Scheduler.send)
 
+        sut._now = Mock(return_value='DATESTAMP')
         with patch('spreadflow_delta.proc._Lockfile.open', side_effect=LockError()) as open_mock:
             sut(insert, send)
 
         self.assertEquals(send.call_count, 1)
-        # FIXME: Extend MatchesSendDeltaItemInvocation with date key.
-        #self.assertThat(send.call_args, matches)
+        self.assertThat(send.call_args, matches)
 
         open_mock.assert_called_once_with('/path/to/some/file.txt.lck')
         self.assertEquals(lock_mock.close.call_count, 0)
 
         # Retry-success lock
-        expected = copy.deepcopy(insert)
-        matches = MatchesSendDeltaItemInvocation(expected, sut.out_locked)
+        matches = MatchesSendDeltaItemInvocation(expected_retry, sut.out_locked)
         send = Mock(spec=Scheduler.send)
 
         with patch('spreadflow_delta.proc._Lockfile.open', return_value=lock_mock) as open_mock:
             sut(insert, send)
 
         self.assertEquals(send.call_count, 1)
-        # FIXME: Extend MatchesSendDeltaItemInvocation with date key.
-        #self.assertThat(send.call_args, matches)
+        self.assertThat(send.call_args, matches)
 
         open_mock.assert_called_once_with('/path/to/some/file.txt.lck')
         self.assertEquals(lock_mock.close.call_count, 0)

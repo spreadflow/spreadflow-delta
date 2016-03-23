@@ -573,6 +573,8 @@ class _Lockfile:
 
 
 class LockingProcessor(object):
+    _now = datetime.datetime.now
+
     def __init__(self, key='lockpath'):
         # oid -> lock.
         self._acquired = {}
@@ -610,7 +612,7 @@ class LockingProcessor(object):
         self._pending = pending
         if len(self._pending) > 0:
             retry_item = {
-                'date': datetime.datetime.now(),
+                'date': self._now(),
                 'deletes': (),
                 'inserts': (),
                 'data': {}
