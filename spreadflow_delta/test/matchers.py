@@ -16,6 +16,10 @@ class MatchesDeltaItem(matchers.MatchesDict):
         if 'parent' in item:
             spec['parent'] = MatchesDeltaItem(item['parent'])
 
+        # Use equal matcher for remaining keys.
+        for key in set(item.keys()) - set(spec.keys()):
+            spec[key] = matchers.Equals(item[key])
+
         super(MatchesDeltaItem, self).__init__(spec)
 
 class MatchesSendDeltaItemInvocation(MatchesInvocation):
