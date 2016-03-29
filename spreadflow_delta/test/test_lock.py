@@ -28,7 +28,7 @@ class LockTestCase(TestCase):
         """
 
         sut = LockingProcessor(key='test_lockpath')
-        insert = {
+        insert_proto = {
             'inserts': ['a'],
             'deletes': [],
             'data': {
@@ -37,11 +37,12 @@ class LockTestCase(TestCase):
                 }
             }
         }
+        insert = copy.deepcopy(insert_proto)
 
         lock_mock = Mock(spec=_Lockfile)
 
         # Acquire lock
-        expected = copy.deepcopy(insert)
+        expected = copy.deepcopy(insert_proto)
         matches = MatchesSendDeltaItemInvocation(expected, sut.out_locked)
         send = Mock(spec=Scheduler.send)
 
@@ -55,7 +56,7 @@ class LockTestCase(TestCase):
         self.assertEquals(lock_mock.close.call_count, 0)
 
         # Release lock
-        expected = copy.deepcopy(insert)
+        expected = copy.deepcopy(insert_proto)
         matches = MatchesSendDeltaItemInvocation(expected, sut.out)
         send = Mock(spec=Scheduler.send)
 
@@ -72,7 +73,7 @@ class LockTestCase(TestCase):
         """
 
         sut = LockingProcessor(key='test_lockpath')
-        insert = {
+        insert_proto = {
             'inserts': ['a'],
             'deletes': [],
             'data': {
@@ -85,14 +86,15 @@ class LockTestCase(TestCase):
         lock_mock = Mock(spec=_Lockfile)
 
         # Try-fail lock
-        expected_try = {
+        expected = {
             'inserts': [],
             'deletes': [],
             'data': {},
             'date': 'DATESTAMP'
         }
-        expected_retry = copy.deepcopy(insert)
-        matches = MatchesSendDeltaItemInvocation(expected_try, sut.out_retry)
+        insert = copy.deepcopy(insert_proto)
+        update = copy.deepcopy(expected)
+        matches = MatchesSendDeltaItemInvocation(expected, sut.out_retry)
         send = Mock(spec=Scheduler.send)
 
         sut._now = Mock(return_value='DATESTAMP')
@@ -106,11 +108,14 @@ class LockTestCase(TestCase):
         self.assertEquals(lock_mock.close.call_count, 0)
 
         # Retry-success lock
-        matches = MatchesSendDeltaItemInvocation(expected_retry, sut.out_locked)
+        lock_mock = Mock(spec=_Lockfile)
+        expected = copy.deepcopy(insert_proto)
+        expected['date'] = 'DATESTAMP'
+        matches = MatchesSendDeltaItemInvocation(expected, sut.out_locked)
         send = Mock(spec=Scheduler.send)
 
         with patch('spreadflow_delta.proc._Lockfile.open', return_value=lock_mock) as open_mock:
-            sut(insert, send)
+            sut(update, send)
 
         self.assertEquals(send.call_count, 1)
         self.assertThat(send.call_args, matches)
@@ -119,11 +124,12 @@ class LockTestCase(TestCase):
         self.assertEquals(lock_mock.close.call_count, 0)
 
         # Release lock
-        expected = copy.deepcopy(insert)
+        expected = copy.deepcopy(insert_proto)
+        expected['date'] = 'DATESTAMP'
         matches = MatchesSendDeltaItemInvocation(expected, sut.out)
         send = Mock(spec=Scheduler.send)
 
-        sut.release(insert, send)
+        sut.release(update, send)
 
         self.assertEquals(send.call_count, 1)
         self.assertThat(send.call_args, matches)
