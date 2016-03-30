@@ -579,8 +579,12 @@ class LockingProcessor(object):
         # oid -> lock.
         self._acquired = {}
 
-        # list of (oid, doc).
-        self._pending = []
+        # A delta item with all pending deletes/inserts
+        self._pending = {}
+
+        # A list of known lockpaths
+        # oid -> path
+        self._known = {}
 
         self.key = key
         self.out = object()
@@ -588,29 +592,53 @@ class LockingProcessor(object):
         self.out_locked = object()
 
     def __call__(self, item, send):
-        data = {}
-        pending = []
+        merged = self._merge(item)
 
         # Try to acquire a lockfile for all pending and new inserts.
-        for oid, doc in self._inserts(item):
+        locked_data = {}
+        pending_data = {}
+        for oid, doc in merged['data'].items():
             try:
                 self._acquired[oid] = _Lockfile.open(doc[self.key])
-                data[oid] = doc
+                locked_data[oid] = doc
             except LockError:
-                pending.append((oid, doc))
+                pending_data[oid] = doc
+
+        pending_paths = set([doc[self.key] for doc in pending_data.values()])
+        pending_deletes = []
+        locked_deletes = []
+        for oid in merged['deletes']:
+            # pass a delete to pending if a delete has a known path and there
+            # is a pending insert for that path.
+            if oid in self._known and self._known[oid] in pending_paths:
+                pending_deletes.append(oid)
+            else:
+                locked_deletes.append(oid)
 
         # Reconstruct and send the message to the locked output port.
-        pending_oids = set(oid for oid, doc in self._pending)
-        item['deletes'] = [oid for oid in item['deletes'] if oid not in pending_oids]
-        item['inserts'] = list(data.keys())
-        item['data'] = data
+        item['deletes'] = list(locked_deletes)
+        item['inserts'] = list(locked_data.keys())
+        item['data'] = locked_data
 
         if not is_delta_empty(item):
             send(item, self.out_locked)
 
+        # Update known paths.
+        for oid in locked_deletes:
+            self._known.pop(oid)
+
+        for oid, doc in locked_data.items():
+            self._known[oid] = doc[self.key]
+
+        # Update pending.
+        self._pending = {
+            'deletes': pending_deletes,
+            'inserts': list(pending_data.keys()),
+            'data': pending_data
+        }
+
         # Push to retry output port.
-        self._pending = pending
-        if len(self._pending) > 0:
+        if not is_delta_empty(self._pending):
             retry_item = {
                 'date': self._now(),
                 'deletes': (),
@@ -636,19 +664,32 @@ class LockingProcessor(object):
             lockfile.close()
 
         self._acquired = {}
-        self._pending = []
+        self._pending = {}
+        self._known = {}
 
-    def _inserts(self, item):
+    def _merge(self, item):
         """
-        Iterates over pending and new inserts.
+        Merges pending docs with the new item.
         """
-        for oid, doc in self._pending:
+        merged_data = {}
+        merged_deletes = self._pending.get('deletes', [])
+
+        pending_data = self._pending.get('data', {})
+        for oid in self._pending.get('inserts', []):
             if oid not in item['deletes']:
-                yield (oid, doc)
+                merged_data[oid] = pending_data[oid]
 
-        for oid in item['inserts']:
-            doc = item['data'][oid]
-            yield (oid, doc)
+        for oid in item['deletes']:
+            if oid not in self._pending.get('inserts', []):
+                merged_deletes.append(oid)
+
+        merged_data.update(item['data'])
+
+        return {
+            'deletes': merged_deletes,
+            'inserts': list(merged_data.keys()),
+            'data': merged_data
+        }
 
     @property
     def dependencies(self):
