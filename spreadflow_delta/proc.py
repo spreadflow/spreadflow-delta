@@ -128,9 +128,12 @@ class MapReduceBase(object):
     def finalize(self, key, value):
         return value
 
-    SORT_DEFAULT = {
-        'key': lambda triple: triple[0]
-    }
+
+    def sort_key(self, key, value, dockey):
+        return key
+
+    sort_reverse = False
+
 
     def _dummy_coiterate(self, iterator):
         for x in iterator:
@@ -139,8 +142,6 @@ class MapReduceBase(object):
         return defer.succeed(iterator)
 
     def __init__(self, coiterate=None):
-        self.sort = self.SORT_DEFAULT
-
         if coiterate == True:
             from twisted.internet.task import coiterate
 
@@ -170,12 +171,16 @@ class MapReduceBase(object):
         for oid in msg.pop('inserts'):
             # FIXME: Maybe defer to another thread and yield
             tuples = self._map_one(oid, orig_data[oid])
-            keys_mapped.update(self._add(oid, tuples))
+            if len(tuples):
+                keys_mapped.update(self._add(oid, tuples))
 
         # Compute the list of triples which will be used in the subsequent
         # reduction step.
         triples = [t for t in self._triples if t[0] in keys_mapped.union(keys_deleted)]
-        triples.sort(**self.sort)
+        triples.sort(
+            key=lambda triple: self.sort_key(*triple),
+            reverse=self.sort_reverse
+        )
 
         # Partition the data-set and apply the reduce function.
         buffer = {}
@@ -246,12 +251,13 @@ class MapReduceBase(object):
 
 class MapReduce(MapReduceBase):
 
-    def __init__(self, map=None, reduce=None, finalize=None, sort=None, coiterate=None):
+    def __init__(self, map=None, reduce=None, finalize=None, sort_key=None, sort_reverse=False, coiterate=None):
         super(MapReduce, self).__init__(coiterate=coiterate)
         self._map_func = map if map else super(MapReduce, self).map
         self._reduce_func = reduce if reduce else super(MapReduce, self).reduce
         self._finalize_func = finalize if finalize else super(MapReduce, self).finalize
-        self.sort = sort if sort else self.SORT_DEFAULT
+        self._sort_key_func = sort_key if sort_key else super(MapReduce, self).sort_key
+        self.sort_reverse = sort_reverse
 
     def map(self, key, value):
         for item in self._map_func(key, value):
@@ -260,9 +266,11 @@ class MapReduce(MapReduceBase):
     def reduce(self, key, values):
         return self._reduce_func(key, values)
 
-
     def finalize(self, key, value):
         return self._finalize_func(key, value)
+
+    def sort_key(self, key, value, dockey):
+        return self._sort_key_func(key, value, dockey)
 
 
 class UnpackBase(object):
