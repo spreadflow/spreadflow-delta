@@ -18,6 +18,7 @@ except ImportError:
 
 from twisted.internet import defer
 
+from spreadflow_core.flow import ComponentBase
 from spreadflow_delta import util
 
 
@@ -580,7 +581,7 @@ class _Lockfile:
         self.close()
 
 
-class LockingProcessor(object):
+class LockingProcessor(ComponentBase):
     _now = datetime.datetime.now
 
     def __init__(self, key='lockpath'):
@@ -698,6 +699,14 @@ class LockingProcessor(object):
             'inserts': list(merged_data.keys()),
             'data': merged_data
         }
+
+    @property
+    def ins(self):
+        return [self, self.release]
+
+    @property
+    def outs(self):
+        return [self.out_locked, self.out_retry, self.out]
 
     @property
     def dependencies(self):
