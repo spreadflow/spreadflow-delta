@@ -707,9 +707,3 @@ class LockingProcessor(ComponentBase):
     @property
     def outs(self):
         return [self.out_locked, self.out_retry, self.out]
-
-    @property
-    def dependencies(self):
-        yield (self, self.out_locked)
-        yield (self, self.out_retry)
-        yield (self.release, self.out)
