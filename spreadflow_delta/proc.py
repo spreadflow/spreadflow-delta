@@ -18,7 +18,7 @@ except ImportError:
 
 from twisted.internet import defer
 
-from spreadflow_core.flow import ComponentBase
+from spreadflow_core.component import ComponentBase
 from spreadflow_delta import util
 
 
