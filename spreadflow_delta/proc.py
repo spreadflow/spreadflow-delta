@@ -19,6 +19,8 @@ except ImportError:
 from twisted.internet import defer
 
 from spreadflow_core.component import ComponentBase
+from spreadflow_core.proc import Throttle, Sleep
+from spreadflow_core.script import ProcessTemplate, ChainTemplate
 from spreadflow_delta import util
 
 
@@ -707,3 +709,31 @@ class LockingProcessor(ComponentBase):
     @property
     def outs(self):
         return [self.out_locked, self.out_retry, self.out]
+
+class LockedProcessTemplate(ProcessTemplate):
+    chain = None
+    delay = 5
+    key = 'lockpath'
+
+    def __init__(self, chain=None, delay=None, key=None):
+        if chain is not None:
+            self.chain = chain
+        if delay is not None:
+            self.delay = delay
+        if key is not None:
+            self.key = key
+
+    def apply(self, ctx):
+        process = LockingProcessor(self.key)
+
+        ChainTemplate(chain=[process.out_locked] + list(self.chain) +
+                      [process.release]).apply(ctx)
+
+        ChainTemplate(chain=[
+            process.out_retry,
+            Throttle(self.delay),
+            Sleep(self.delay),
+            process
+        ]).apply(ctx)
+
+        return process
