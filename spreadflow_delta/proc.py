@@ -18,7 +18,9 @@ except ImportError:
 
 from twisted.internet import defer
 
-from spreadflow_core.component import ComponentBase
+from spreadflow_core.component import ComponentBase, Compound
+from spreadflow_core.dsl.tokens import \
+    ComponentToken, DefaultInputToken, DefaultOutputToken
 from spreadflow_core.proc import Throttle, Sleep
 from spreadflow_core.script import ProcessTemplate, ChainTemplate
 from spreadflow_delta import util
@@ -724,16 +726,23 @@ class LockedProcessTemplate(ProcessTemplate):
             self.key = key
 
     def apply(self, ctx):
-        process = LockingProcessor(self.key)
+        lock = LockingProcessor(self.key)
+        ctx.add(ComponentToken(lock))
 
-        ChainTemplate(chain=[process.out_locked] + list(self.chain) +
-                      [process.release]).apply(ctx)
+        locked_chain = ChainTemplate(chain=[lock.out_locked] + list(self.chain)
+                                     + [lock.release]).apply(ctx)
 
-        ChainTemplate(chain=[
-            process.out_retry,
+        retry_chain = ChainTemplate(chain=[
+            lock.out_retry,
             Throttle(self.delay),
             Sleep(self.delay),
-            process
+            lock
         ]).apply(ctx)
+
+        process = Compound(children=[lock, locked_chain, retry_chain])
+
+        ctx.add(DefaultInputToken(process, lock))
+        ctx.add(DefaultOutputToken(process, lock.out))
+        ctx.add(ComponentToken(process))
 
         return process
