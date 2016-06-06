@@ -18,9 +18,12 @@ except ImportError:
 
 from twisted.internet import defer
 
-from spreadflow_core.component import ComponentBase, Compound
+from spreadflow_core.component import Compound
 from spreadflow_core.dsl.tokens import \
-    ComponentToken, DefaultInputToken, DefaultOutputToken
+    ConnectionToken, \
+    DefaultInputToken, \
+    DefaultOutputToken, \
+    ParentElementToken
 from spreadflow_core.proc import Throttle, Sleep
 from spreadflow_core.script import ProcessTemplate, ChainTemplate
 from spreadflow_delta import util
@@ -585,7 +588,7 @@ class _Lockfile:
         self.close()
 
 
-class LockingProcessor(ComponentBase):
+class LockingProcessor(object):
     _now = datetime.datetime.now
 
     def __init__(self, key='lockpath'):
@@ -712,6 +715,24 @@ class LockingProcessor(ComponentBase):
     def outs(self):
         return [self.out_locked, self.out_retry, self.out]
 
+class LockingProcessorTemplate(ProcessTemplate):
+    key = 'lockpath'
+
+    def __init__(self, key=None):
+        if key is not None:
+            self.key = key
+
+    def apply(self, ctx):
+        process = LockingProcessor(self.key)
+
+        ctx.add(ParentElementToken(process.out, process))
+        ctx.add(ParentElementToken(process.out_locked, process))
+        ctx.add(ParentElementToken(process.out_retry, process))
+        ctx.add(ParentElementToken(process.release, process))
+        ctx.add(DefaultOutputToken(process, process.out))
+
+        return process
+
 class LockedProcessTemplate(ProcessTemplate):
     chain = None
     delay = 5
@@ -726,23 +747,35 @@ class LockedProcessTemplate(ProcessTemplate):
             self.key = key
 
     def apply(self, ctx):
-        lock = LockingProcessor(self.key)
-        ctx.add(ComponentToken(lock))
+        lock = LockingProcessorTemplate(self.key).apply(ctx)
+        locked_chain = self._locked_chain().apply(ctx)
+        retry_chain = self._retry_chain().apply(ctx)
 
-        locked_chain = ChainTemplate(chain=[lock.out_locked] + list(self.chain)
-                                     + [lock.release]).apply(ctx)
+        # Connect the locked chain.
+        ctx.add(ConnectionToken(lock.out_locked, locked_chain))
+        ctx.add(ConnectionToken(locked_chain, lock.release))
 
-        retry_chain = ChainTemplate(chain=[
-            lock.out_retry,
-            Throttle(self.delay),
-            Sleep(self.delay),
-            lock
-        ]).apply(ctx)
+        # Connect the retry chain.
+        ctx.add(ConnectionToken(lock.out_retry, retry_chain))
+        ctx.add(ConnectionToken(retry_chain, lock))
 
+        # Create a parent for all three components.
         process = Compound(children=[lock, locked_chain, retry_chain])
+        ctx.add(ParentElementToken(lock, process))
+        ctx.add(ParentElementToken(locked_chain, process))
+        ctx.add(ParentElementToken(retry_chain, process))
 
+        # Add default input and default output ports.
         ctx.add(DefaultInputToken(process, lock))
         ctx.add(DefaultOutputToken(process, lock.out))
-        ctx.add(ComponentToken(process))
 
         return process
+
+    def _locked_chain(self):
+        return ChainTemplate(chain=self.chain)
+
+    def _retry_chain(self):
+        return ChainTemplate(chain=[
+            Throttle(self.delay),
+            Sleep(self.delay),
+        ])
