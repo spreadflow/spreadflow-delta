@@ -19,7 +19,10 @@ except ImportError:
 from twisted.internet import defer
 
 from spreadflow_core.component import Compound
+from spreadflow_core.dsl.stream import AddTokenOp
+from spreadflow_core.dsl.parser import ComponentParser
 from spreadflow_core.dsl.tokens import \
+    ComponentToken, \
     ConnectionToken, \
     DefaultInputToken, \
     DefaultOutputToken, \
@@ -722,21 +725,21 @@ class LockingProcessorTemplate(ProcessTemplate):
         if key is not None:
             self.key = key
 
-    def apply(self, ctx):
+    def apply(self):
         process = LockingProcessor(self.key)
+        yield AddTokenOp(ComponentToken(process))
 
-        ctx.add(ParentElementToken(process.out, process))
-        ctx.add(ParentElementToken(process.out_locked, process))
-        ctx.add(ParentElementToken(process.out_retry, process))
-        ctx.add(ParentElementToken(process.release, process))
-        ctx.add(DefaultOutputToken(process, process.out))
-
-        return process
+        yield AddTokenOp(ParentElementToken(process.out, process))
+        yield AddTokenOp(ParentElementToken(process.out_locked, process))
+        yield AddTokenOp(ParentElementToken(process.out_retry, process))
+        yield AddTokenOp(ParentElementToken(process.release, process))
+        yield AddTokenOp(DefaultOutputToken(process, process.out))
 
 class LockedProcessTemplate(ProcessTemplate):
     chain = None
     delay = 5
     key = 'lockpath'
+    component_parser = ComponentParser()
 
     def __init__(self, chain=None, delay=None, key=None):
         if chain is not None:
@@ -746,30 +749,40 @@ class LockedProcessTemplate(ProcessTemplate):
         if key is not None:
             self.key = key
 
-    def apply(self, ctx):
-        lock = LockingProcessorTemplate(self.key).apply(ctx)
-        locked_chain = self._locked_chain().apply(ctx)
-        retry_chain = self._retry_chain().apply(ctx)
+    def apply(self):
+        stream = LockingProcessorTemplate(self.key).apply()
+        for operation in self.component_parser.divert(stream):
+            yield operation
+        lock = self.component_parser.get_component()
+
+        stream = self._locked_chain().apply()
+        for operation in self.component_parser.divert(stream):
+            yield operation
+        locked_chain = self.component_parser.get_component()
+
+        stream = self._retry_chain().apply()
+        for operation in self.component_parser.divert(stream):
+            yield operation
+        retry_chain = self.component_parser.get_component()
 
         # Connect the locked chain.
-        ctx.add(ConnectionToken(lock.out_locked, locked_chain))
-        ctx.add(ConnectionToken(locked_chain, lock.release))
+        yield AddTokenOp(ConnectionToken(lock.out_locked, locked_chain))
+        yield AddTokenOp(ConnectionToken(locked_chain, lock.release))
 
         # Connect the retry chain.
-        ctx.add(ConnectionToken(lock.out_retry, retry_chain))
-        ctx.add(ConnectionToken(retry_chain, lock))
+        yield AddTokenOp(ConnectionToken(lock.out_retry, retry_chain))
+        yield AddTokenOp(ConnectionToken(retry_chain, lock))
 
         # Create a parent for all three components.
         process = Compound(children=[lock, locked_chain, retry_chain])
-        ctx.add(ParentElementToken(lock, process))
-        ctx.add(ParentElementToken(locked_chain, process))
-        ctx.add(ParentElementToken(retry_chain, process))
+        yield AddTokenOp(ComponentToken(process))
+        yield AddTokenOp(ParentElementToken(lock, process))
+        yield AddTokenOp(ParentElementToken(locked_chain, process))
+        yield AddTokenOp(ParentElementToken(retry_chain, process))
 
         # Add default input and default output ports.
-        ctx.add(DefaultInputToken(process, lock))
-        ctx.add(DefaultOutputToken(process, lock.out))
-
-        return process
+        yield AddTokenOp(DefaultInputToken(process, lock))
+        yield AddTokenOp(DefaultOutputToken(process, lock.out))
 
     def _locked_chain(self):
         return ChainTemplate(chain=self.chain)
