@@ -28,7 +28,7 @@ from spreadflow_core.dsl.tokens import \
     DefaultOutputToken, \
     ParentElementToken
 from spreadflow_core.proc import Throttle, Sleep
-from spreadflow_core.script import ProcessTemplate, ChainTemplate
+from spreadflow_core.script import ComponentTemplate, ChainTemplate
 from spreadflow_delta import util
 
 
@@ -718,7 +718,7 @@ class LockingProcessor(object):
     def outs(self):
         return [self.out_locked, self.out_retry, self.out]
 
-class LockingProcessorTemplate(ProcessTemplate):
+class LockingProcessorTemplate(ComponentTemplate):
     key = 'lockpath'
 
     def __init__(self, key=None):
@@ -735,7 +735,7 @@ class LockingProcessorTemplate(ProcessTemplate):
         yield AddTokenOp(ParentElementToken(process.release, process))
         yield AddTokenOp(DefaultOutputToken(process, process.out))
 
-class LockedProcessTemplate(ProcessTemplate):
+class LockedProcessTemplate(ComponentTemplate):
     chain = None
     delay = 5
     key = 'lockpath'
