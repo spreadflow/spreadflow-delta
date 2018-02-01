@@ -56,6 +56,77 @@ def is_delta_empty(item):
     return len(item['inserts']) == 0 and len(item['deletes']) == 0
 
 
+class ReplaceBase(object):
+    """
+    Abstract base class for replacers.
+    """
+
+    def __call__(self, item, send):
+        if is_delta(item) and not is_delta_empty(item):
+            for oid in item['inserts']:
+                item['data'][oid] = self.replace(item['data'][oid], oid)
+
+        send(item, self)
+
+    def replace(self, doc, key):
+        """
+        Replace the incoming insertable document.
+        """
+        raise NotImplementedError("Subclasses must implement this method")
+
+
+class Replace(ReplaceBase):
+    """
+    Replace the incoming insertable document with a computed result.
+    """
+
+    def __init__(self, func, *args, **kwds):
+        self._replace_func = func
+        self._replace_args = args
+        self._replace_kwds = kwds
+
+    def replace(self, doc, key):
+        return self._replace_func(doc, key, *self._replace_args, **self._replace_kwds)
+
+
+class ReplaceKeyBase(object):
+    """
+    Abstract base class for key replacers.
+    """
+
+    def __call__(self, item, send):
+        if is_delta(item) and not is_delta_empty(item):
+            replacedInserts = [self.replace_key(oid) for oid in item['inserts']]
+            replacedDeletes = [self.replace_key(oid) for oid in item['deletes']]
+            replacedData = {repl: item['data'][oid] for oid, repl in zip(item['inserts'], replacedInserts)}
+
+            item['inserts'] = replacedInserts
+            item['deletes'] = replacedDeletes
+            item['data'] = replacedData
+
+        send(item, self)
+
+    def replace_key(self, key):
+        """
+        Replace the incoming insertable document.
+        """
+        raise NotImplementedError("Subclasses must implement this method")
+
+
+class ReplaceKey(ReplaceKeyBase):
+    """
+    Replace the incoming insertable and deletable keys with a computed result.
+    """
+
+    def __init__(self, func, *args, **kwds):
+        self._replace_func = func
+        self._replace_args = args
+        self._replace_kwds = kwds
+
+    def replace_key(self, key):
+        return self._replace_func(key, *self._replace_args, **self._replace_kwds)
+
+
 class ExtractorBase(object):
     """
     Abstract base class for extractors.
