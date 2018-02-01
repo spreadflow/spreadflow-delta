@@ -1,1 +1,1 @@
--e git+https://github.com/znerol/spreadflow-core#egg=SpreadFlowCore
+-e git+https://github.com/znerol/spreadflow-core@master#egg=SpreadFlowCore
